@@ -57,7 +57,7 @@ class AutoActTask extends Plugin {
      */
     private async _doLPLAct(users: Map<string, User>, lplParams: lplParams[]) {
         for (const param of lplParams) {
-            const { name, endTime, startTime, game_type, room_id, send, sgin, share } = param
+            const { name, endTime, startTime, game_type, room_id, send, sgin, share, sendMsg } = param
             const now: number = Date.now()
             if (now > startTime && now < endTime) {
                 for (const userArr of users) {
@@ -99,12 +99,13 @@ class AutoActTask extends Plugin {
                     if (send !== 0 && send !== undefined) {
                         const actLPLSend = `${name}发送弹幕`
                         let count: number = 1
-                        let temp: number = 0
+                        let temp: number = 1
+                        let msg: string = ''
                         while (count <= send) {
                             const actAPISend: XHRoptions = {
                                 method: 'POST',
                                 uri: `https://api.live.bilibili.com/msg/send`,
-                                body: `msg=${count}&roomid=${room_id}&color=16777215&fontsize=25&mode=1&rnd=${Math.round(Date.now() / 1000)}&bubble=0&csrf_token=${csrf_token}&csrf=${csrf_token}`,
+                                body: `msg=${sendMsg === undefined ? '加油' : sendMsg}&roomid=${room_id}&color=16777215&fontsize=25&mode=1&rnd=${Math.round(Date.now() / 1000)}&bubble=0&csrf_token=${csrf_token}&csrf=${csrf_token}`,
                                 jar: user.jar,
                                 json: true
                             }
@@ -112,13 +113,23 @@ class AutoActTask extends Plugin {
                             if (sendInfo !== undefined && sendInfo.response.statusCode === 200 && sendInfo.body.code === 0 && sendInfo.body.msg === '') {
                                 count++
                             }
-                            else if (sendInfo !== undefined && sendInfo.response.statusCode === 200 && sendInfo.body.code === 0 && sendInfo.body.msg === '系统升级中') break
-                            else if (sendInfo !== undefined && sendInfo.body.code === 1001) break
-                            if (temp++ > send + 10) break
+                            else if (sendInfo !== undefined && sendInfo.response.statusCode === 200 && sendInfo.body.code === 0 && (sendInfo.body.msg === '系统升级中' || sendInfo.body.msg === '你被禁言啦')) {
+                                msg = sendInfo.body.msg
+                                break
+                            }
+                            else if (sendInfo !== undefined && (sendInfo.body.code === 1001 || sendInfo.body.code === 1003)) {
+                                msg = sendInfo.body.msg
+                                break
+                            } else {
+                                if (sendInfo !== undefined) {
+                                    msg = sendInfo.body.msg
+                                }
+                            }
+                            if (temp++ > send * 2) break
                             await tools.Sleep(3 * 1000)
                         }
                         if (count <= send) {
-                            tools.Log(user.nickname, '活动任务', actLPLSend, '未完成，特殊原因停止任务')
+                            tools.Log(user.nickname, '活动任务', actLPLSend, `未完成，原因:${msg}`)
                         } else {
                             tools.Log(user.nickname, '活动任务', actLPLSend, '已完成')
                         }
@@ -147,6 +158,7 @@ interface taskXHR {
 }
 
 interface EventInfo {
+    codes: number[]
     lpl_task: lplParams[]
 }
 
@@ -160,6 +172,7 @@ interface lplParams {
     send: number
     startTime: number
     endTime: number
+    sendMsg: string
 }
 
 export default new AutoActTask()
