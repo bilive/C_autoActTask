@@ -13,7 +13,7 @@ class AutoActTask extends plugin_1.default {
         super();
         this.name = '自动活动任务';
         this.description = '每天自动进行活动任务（不定期任务）';
-        this.version = '0.0.1';
+        this.version = '0.0.2';
         this.author = 'ShmilyChen';
     }
     async load({ defaultOptions, whiteList }) {
@@ -48,42 +48,79 @@ class AutoActTask extends plugin_1.default {
             }
         }
     }
-    _doLPLAct(users, lplParams) {
-        lplParams.forEach(param => {
-            const { name, endTime, startTime, game_type, room_id } = param;
+    async _doLPLAct(users, lplParams) {
+        for (const param of lplParams) {
+            const { name, endTime, startTime, game_type, room_id, send, sgin, share } = param;
             const now = Date.now();
             if (now > startTime && now < endTime) {
-                users.forEach((user) => {
+                for (const userArr of users) {
+                    const user = userArr[1];
                     if (!user.userData['doActTask'])
                         return;
-                    const actLPLSgin = `${name}签到`;
-                    const actAPI1 = {
-                        method: 'POST',
-                        uri: `https://api.live.bilibili.com/xlive/general-interface/v1/lpl-task/MatchSign`,
-                        body: `room_id=${room_id}&game_type=${game_type}&csrf_token=${plugin_1.tools.getCookie(user.jar, 'bili_jct')}&csrf=${plugin_1.tools.getCookie(user.jar, 'bili_jct')}`,
-                        jar: user.jar,
-                        json: true
-                    };
-                    plugin_1.tools.XHR(actAPI1).then(actAPI1Callback => {
-                        if (actAPI1Callback !== undefined && actAPI1Callback.response.statusCode === 200)
-                            plugin_1.tools.Log(user.nickname, '活动任务', actLPLSgin, '已完成');
-                    });
-                    const actLPLShare = `${name}分享`;
-                    const actAPI2 = {
-                        method: 'POST',
-                        uri: `https://api.live.bilibili.com/xlive/general-interface/v1/lpl-task/MatchShare`,
-                        body: `game_type=${game_type}&csrf_token=${plugin_1.tools.getCookie(user.jar, 'bili_jct')}&csrf=${plugin_1.tools.getCookie(user.jar, 'bili_jct')}`,
-                        jar: user.jar,
-                        json: true
-                    };
-                    plugin_1.tools.XHR(actAPI2).then(actAPI2Callback => {
-                        if (actAPI2Callback !== undefined && actAPI2Callback.response.statusCode === 200) {
-                            plugin_1.tools.Log(user.nickname, '活动任务', actLPLShare, '已完成');
+                    const csrf_token = plugin_1.tools.getCookie(user.jar, 'bili_jct');
+                    if (sgin && sgin !== undefined) {
+                        const actLPLSgin = `${name}签到`;
+                        const actAPISgin = {
+                            method: 'POST',
+                            uri: `https://api.live.bilibili.com/xlive/general-interface/v1/lpl-task/MatchSign`,
+                            body: `room_id=${room_id}&game_type=${game_type}&csrf_token=${csrf_token}&csrf=${csrf_token}`,
+                            jar: user.jar,
+                            json: true
+                        };
+                        plugin_1.tools.XHR(actAPISgin).then(actAPI1Callback => {
+                            if (actAPI1Callback !== undefined && actAPI1Callback.response.statusCode === 200)
+                                plugin_1.tools.Log(user.nickname, '活动任务', actLPLSgin, '已完成');
+                        });
+                    }
+                    if (share && share !== undefined) {
+                        const actLPLShare = `${name}分享`;
+                        const actAPIShare = {
+                            method: 'POST',
+                            uri: `https://api.live.bilibili.com/xlive/general-interface/v1/lpl-task/MatchShare`,
+                            body: `game_type=${game_type}&csrf_token=${csrf_token}&csrf=${csrf_token}`,
+                            jar: user.jar,
+                            json: true
+                        };
+                        plugin_1.tools.XHR(actAPIShare).then(actAPI2Callback => {
+                            if (actAPI2Callback !== undefined && actAPI2Callback.response.statusCode === 200) {
+                                plugin_1.tools.Log(user.nickname, '活动任务', actLPLShare, '已完成');
+                            }
+                        });
+                    }
+                    if (send !== 0 && send !== undefined) {
+                        const actLPLSend = `${name}发送弹幕`;
+                        let count = 1;
+                        let temp = 0;
+                        while (count <= send) {
+                            const actAPISend = {
+                                method: 'POST',
+                                uri: `https://api.live.bilibili.com/msg/send`,
+                                body: `msg=${count}&roomid=${room_id}&color=16777215&fontsize=25&mode=1&rnd=${Math.round(Date.now() / 1000)}&bubble=0&csrf_token=${csrf_token}&csrf=${csrf_token}`,
+                                jar: user.jar,
+                                json: true
+                            };
+                            const sendInfo = await plugin_1.tools.XHR(actAPISend);
+                            if (sendInfo !== undefined && sendInfo.response.statusCode === 200 && sendInfo.body.code === 0 && sendInfo.body.msg === '') {
+                                count++;
+                            }
+                            else if (sendInfo !== undefined && sendInfo.response.statusCode === 200 && sendInfo.body.code === 0 && sendInfo.body.msg === '系统升级中')
+                                break;
+                            else if (sendInfo !== undefined && sendInfo.body.code === 1001)
+                                break;
+                            if (temp++ > send + 10)
+                                break;
+                            await plugin_1.tools.Sleep(3 * 1000);
                         }
-                    });
-                });
+                        if (count <= send) {
+                            plugin_1.tools.Log(user.nickname, '活动任务', actLPLSend, '未完成，特殊原因停止任务');
+                        }
+                        else {
+                            plugin_1.tools.Log(user.nickname, '活动任务', actLPLSend, '已完成');
+                        }
+                    }
+                }
             }
-        });
+        }
     }
     async _getEventInfo() {
         const url = {
